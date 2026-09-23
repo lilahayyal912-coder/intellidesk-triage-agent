@@ -144,7 +144,20 @@ def _process_ticket(
         )
     except EscalationError as exc:
         logger.error("[%s] Agent 3 FAILED: %s", ticket_id, exc)
-        return _error_row(ticket_id, service, error_message, stage="Agent3", reason=str(exc))
+        # Preserve the Agent 1 classification so the row is still useful for
+        # human review, even though Agent 3 could not complete.
+        return {
+            "ticket_id":                ticket_id,
+            "service":                  service,
+            "error_message":            error_message,
+            "severity":                 classification.severity,
+            "short_reason":             classification.short_reason,
+            "escalated_team":           "",
+            "final_severity":           f"ERROR (Agent3)",
+            "justification":            f"Agent 3 failed – escalation incomplete. Agent 1 result preserved. Reason: {exc}",
+            "recommended_next_steps":   "Manual review required – escalation agent did not complete.",
+            "requires_human_escalation": True,
+        }
 
     # ── Assemble output row ───────────────────────────────────────────────────
     return {

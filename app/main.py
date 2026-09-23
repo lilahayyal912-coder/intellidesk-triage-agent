@@ -20,16 +20,36 @@ _REPO_ROOT = _APP_DIR.parent
 _SRC_DIR  = _REPO_ROOT / "src"
 sys.path.insert(0, str(_SRC_DIR))
 
-from services.severity_classifier import ClassificationError, classify
-from services.runbook_retriever import RunbookRetriever
-from services.escalation_agent import (
-    EscalationError,
-    EscalationRequest,
-    escalate,
-)
-from config import GROQ_API_KEY, GROQ_BASE_URL, GROQ_MODEL
-
 import openai
+
+# ── Config + service imports — all deferred so EnvironmentError is catchable ──
+# The service modules (severity_classifier, escalation_agent) themselves import
+# config at their own module level.  We must therefore import them *inside* the
+# try/except so that any EnvironmentError raised deep in the import chain is
+# caught here, before Streamlit has rendered anything.
+_CONFIG_ERROR: str | None = None
+try:
+    from config import GROQ_API_KEY, GROQ_BASE_URL, GROQ_MODEL  # must be first
+    from services.severity_classifier import ClassificationError, classify
+    from services.runbook_retriever import RunbookRetriever
+    from services.escalation_agent import (
+        EscalationError,
+        EscalationRequest,
+        escalate,
+    )
+except EnvironmentError as _exc:
+    _CONFIG_ERROR = str(_exc)
+    # Safe placeholders — never used when _CONFIG_ERROR is set because main()
+    # calls st.stop() before any agent code runs.
+    GROQ_API_KEY = ""   # noqa: S105
+    GROQ_BASE_URL = ""
+    GROQ_MODEL = ""
+    ClassificationError = Exception       # type: ignore[misc,assignment]
+    classify = None                        # type: ignore[assignment]
+    RunbookRetriever = None                # type: ignore[assignment]
+    EscalationError = Exception            # type: ignore[misc,assignment]
+    EscalationRequest = None               # type: ignore[assignment]
+    escalate = None                        # type: ignore[assignment]
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 SERVICES = [
@@ -162,6 +182,8 @@ def _page_analyze() -> None:
             "Incident description",
             placeholder="e.g. All users are unable to log in. The authentication service is returning HTTP 500.",
             height=120,
+            max_chars=2000,
+            help="Maximum 2 000 characters.",
         )
         submitted = st.form_submit_button("🚀 Analyze Incident", use_container_width=True)
 
@@ -170,6 +192,13 @@ def _page_analyze() -> None:
 
     if not error_message.strip():
         st.warning("Please enter an incident description before analyzing.")
+        return
+
+    if len(error_message) > 2000:
+        st.warning(
+            f"Incident description is too long ({len(error_message):,} characters). "
+            "Please shorten it to 2 000 characters or fewer before analyzing."
+        )
         return
 
     try:
@@ -320,6 +349,19 @@ def main() -> None:
         page_icon="🚨",
         layout="wide",
     )
+
+    # ── Config guard — must run before any other UI is rendered ──────────────
+    if _CONFIG_ERROR:
+        st.error(
+            "### ⚙️ Configuration Error\n\n"
+            f"{_CONFIG_ERROR}\n\n"
+            "**To fix this:**\n"
+            "1. Copy `.env.example` to `.env` in the project root.\n"
+            "2. Set `GROQ_API_KEY` to your Groq API key "
+            "([get one free at console.groq.com/keys](https://console.groq.com/keys)).\n"
+            "3. Restart the Streamlit app."
+        )
+        st.stop()
 
     # ── Header ────────────────────────────────────────────────────────────────
     st.title("🚨 IntelliDesk – AI-Powered Incident Triage & Auto-Escalation Agent")

@@ -1,59 +1,238 @@
-IntelliDesk – Incident Triage Runbook (SOPs)
-=============================================
-Format per entry: Trigger | Escalation Team | Default Severity | Typical Root Cause
----------------------------------------------
+IntelliDesk – Incident Triage Runbook
+======================================
+Standard Operating Procedures (SOPs) for AI-assisted triage and escalation.
+Each entry covers: symptoms, likely cause, troubleshooting steps, escalation team, and severity guidance.
 
-• Trigger: Auth-Service – login failure rate > 10%, token validation errors, JWT exceptions, "authentication requests failing"
-  Escalation Team: Identity & Access Management (IAM) Squad + SRE On-Call
-  Default Severity: P1
-  Typical Root Cause: Token-signing key rotation failure or expired certificate on the auth provider.
+──────────────────────────────────────────────────────────────────────────────
+SOP-001: Authentication and Login Failures
+──────────────────────────────────────────────────────────────────────────────
+Service:          Auth-Service
+Symptoms:
+  - Login failure rate > 10% across one or more regions
+  - JWT validation errors or token-signing exceptions in logs
+  - Users reporting "Invalid credentials" despite correct passwords
+  - Authentication API returning HTTP 401 or 500 at high volume
+Likely Cause:
+  - Token-signing key corruption or unannounced certificate rotation
+  - OAuth provider downtime or misconfigured redirect URI
+  - Session store (Redis/Memcached) unreachable
+Troubleshooting Steps:
+  1. Check auth-service error logs for JWT or cert-related exceptions
+  2. Verify token-signing key integrity and expiry in secrets manager
+  3. Confirm OAuth provider status page and redirect URI configuration
+  4. Test session store connectivity from auth-service pods
+  5. Roll back most recent auth-service deployment if issue follows a release
+Escalation Team:   Identity & Access Management (IAM) Squad + SRE On-Call
+Severity Guidance: P1 if failure rate > 25% or full regional outage; P2 if partial degradation
 
-• Trigger: Auth-Service – anomalous login spike, credential-stuffing, brute-force attempts, failed-login count > 5,000 in 5 min
-  Escalation Team: Security Operations Centre (SOC) + IAM Squad
-  Default Severity: P1
-  Typical Root Cause: Leaked credential list being replayed against the authentication endpoint.
+──────────────────────────────────────────────────────────────────────────────
+SOP-002: Database Outage (Primary Node Failure)
+──────────────────────────────────────────────────────────────────────────────
+Service:          Database
+Symptoms:
+  - Primary database node unresponsive or returning connection refused
+  - Replication lag > 60 s or standby node not promoted
+  - Application errors: "could not connect to server" or "too many connections"
+  - Production writes fully blocked; read replicas may still serve queries
+Likely Cause:
+  - Out-of-memory condition causing the primary instance to crash
+  - Deadlock cascade consuming all connection pool slots
+  - Disk full on primary node preventing WAL writes
+  - Automatic failover misconfiguration preventing standby promotion
+Troubleshooting Steps:
+  1. Attempt SSH to primary node; check OS-level memory and disk usage
+  2. Review PostgreSQL logs for OOM kills, deadlock reports, or WAL errors
+  3. If node is unrecoverable, manually promote standby via pg_ctl or cloud console
+  4. Check connection pool (PgBouncer) saturation and restart if necessary
+  5. Notify application teams to retry connections after failover
+Escalation Team:   Database Administration (DBA) Team + SRE On-Call
+Severity Guidance: P1 immediately; engage DBA on-call within 5 minutes
 
-• Trigger: Auth-Service – MFA setup errors, password-reset delays, OTP not delivered, SMTP queue depth > 80%
-  Escalation Team: Identity & Access Management (IAM) Squad
-  Default Severity: P3
-  Typical Root Cause: SMTP relay saturation or misconfigured MFA provider webhook URL.
+──────────────────────────────────────────────────────────────────────────────
+SOP-003: Database Latency and Slow Queries
+──────────────────────────────────────────────────────────────────────────────
+Service:          Database
+Symptoms:
+  - API response times elevated (> 2× baseline)
+  - Slow-query log entries exceeding configured threshold (e.g. > 5 s)
+  - Batch or reporting jobs running beyond SLA window
+  - pg_stat_activity shows long-running queries or lock waits
+Likely Cause:
+  - Missing or invalidated index following schema migration
+  - Statistics not refreshed after large data load (stale query planner data)
+  - N+1 query pattern introduced in a recent code deployment
+  - Table bloat from unvacuumed dead tuples
+Troubleshooting Steps:
+  1. Run pg_stat_activity to identify top offending queries
+  2. Use EXPLAIN ANALYSE on slow queries to identify missing indexes or seq scans
+  3. Check when VACUUM/ANALYSE last ran on affected tables
+  4. If caused by a recent deploy, coordinate with dev team for hotfix or rollback
+  5. Create missing indexes concurrently during off-peak hours
+Escalation Team:   Database Administration (DBA) Team
+Severity Guidance: P2 if SLA breach confirmed; P3 if degraded but within acceptable limits
 
-• Trigger: Database – primary node unresponsive, replication lag > 60s, failover did not trigger, "production writes blocked"
-  Escalation Team: Database Administration (DBA) Team + SRE On-Call
-  Default Severity: P1
-  Typical Root Cause: Deadlock cascade or out-of-memory condition causing the primary instance to stop accepting connections.
+──────────────────────────────────────────────────────────────────────────────
+SOP-004: Payment Gateway Failures
+──────────────────────────────────────────────────────────────────────────────
+Service:          Payment-Gateway
+Symptoms:
+  - Charge or refund API endpoints returning HTTP 500 or 503
+  - Webhook callbacks from payment processor timing out
+  - Revenue dashboards showing zero transaction volume
+  - Duplicate charge records or idempotency key collision alerts
+Likely Cause:
+  - Upstream payment processor (Stripe, Adyen) experiencing an outage
+  - Expired or revoked TLS certificate causing handshake failures
+  - Retry logic not honouring idempotency keys (race condition)
+  - API rate limit exceeded during traffic spike
+Troubleshooting Steps:
+  1. Check upstream processor's status page (e.g. status.stripe.com)
+  2. Verify TLS certificate validity and expiry on payment-gateway service
+  3. Review idempotency key implementation in transaction service code
+  4. Check API rate limit headers in processor responses
+  5. If duplicate charges confirmed, halt retries and alert Finance team immediately
+Escalation Team:   Payments Engineering Squad + Finance On-Call + SRE On-Call
+Severity Guidance: P1 if all transactions failing; P2 if partial failure or duplicate charges
 
-• Trigger: Database – slow queries, SLA breach on batch jobs, table scan alerts, query runtime > 2× baseline
-  Escalation Team: Database Administration (DBA) Team
-  Default Severity: P2
-  Typical Root Cause: Missing or invalidated index following a schema migration or statistics refresh failure.
+──────────────────────────────────────────────────────────────────────────────
+SOP-005: Network Connectivity and Routing Issues
+──────────────────────────────────────────────────────────────────────────────
+Service:          Network
+Symptoms:
+  - Core switch or router unreachable via ICMP or SNMP
+  - Inter-VLAN routing failure between data-centre pods
+  - Packet loss > 2% on uplinks detected by monitoring
+  - BGP session drops or route withdrawals in network logs
+  - Employees unable to connect to Wi-Fi or internal services
+Likely Cause:
+  - Switch firmware bug or misconfigured spanning-tree protocol (forwarding loop)
+  - Faulty SFP transceiver introducing signal errors
+  - BGP misconfiguration following a change window
+  - Wi-Fi firmware push corrupting access-point configuration
+Troubleshooting Steps:
+  1. Ping and traceroute from multiple vantage points to isolate affected segment
+  2. Review switch/router logs for spanning-tree topology changes or port flaps
+  3. Check BGP neighbour state and route table on affected routers
+  4. For Wi-Fi issues, check controller logs for failed firmware upgrades; roll back if possible
+  5. If core switch is unreachable, dispatch on-site network engineer for physical inspection
+Escalation Team:   Network Operations (NetOps) Team + Data Centre Ops (if on-site required)
+Severity Guidance: P1 if > 20% of services unavailable; P2 for office Wi-Fi outage; P3 for intermittent packet loss
 
-• Trigger: Database – disk utilisation > 75% on any node, storage growth rate alert, "threshold breach within 48 hours"
-  Escalation Team: Database Administration (DBA) Team + Infrastructure Team
-  Default Severity: P3
-  Typical Root Cause: Unarchived audit logs or runaway write-ahead log (WAL) accumulation from a stalled replication slot.
+──────────────────────────────────────────────────────────────────────────────
+SOP-006: Frontend UI Problems
+──────────────────────────────────────────────────────────────────────────────
+Service:          Frontend-UI
+Symptoms:
+  - White screen or blank page on application load in specific browsers
+  - JavaScript console errors (bundle parse failure, 404 on asset files)
+  - Session timeout behaviour incorrect (too short or too long)
+  - UI elements misaligned, truncated, or invisible on certain viewports
+  - User-reported cosmetic issues (wrong logo, theme not persisting)
+Likely Cause:
+  - Broken asset hash in CDN manifest after a bad deployment
+  - Cache-busting misconfiguration serving stale bundle to users
+  - Browser-specific CSS or JS compatibility regression
+  - Session configuration value overridden incorrectly in a recent deploy
+Troubleshooting Steps:
+  1. Reproduce in affected browser and capture console errors
+  2. Check CDN cache invalidation status for the most recent deployment
+  3. Compare asset hashes in the release manifest against files in CDN
+  4. If session timeout affected, verify environment variable for timeout duration
+  5. For cosmetic issues, log a P4 bug; for white-screen issues, consider rollback
+Escalation Team:   Frontend Engineering Squad + Release Management (for deployment rollback)
+Severity Guidance: P2 if white screen affects > 5% of users; P3 for functional UI bugs; P4 for cosmetic issues
 
-• Trigger: Payment-Gateway – HTTP 5xx on charge/refund endpoints, payment processor timeouts, "revenue impact", webhook failures
-  Escalation Team: Payments Engineering Squad + Finance On-Call + SRE On-Call
-  Default Severity: P1
-  Typical Root Cause: Upstream payment processor outage or misconfigured TLS certificate causing handshake failures.
+──────────────────────────────────────────────────────────────────────────────
+SOP-007: Email Delivery Issues
+──────────────────────────────────────────────────────────────────────────────
+Service:          Email-Service
+Symptoms:
+  - Transactional emails (password reset, MFA, invoices) not received
+  - SMTP relay queue depth growing beyond 80%
+  - Bounce rate spike or SMTP authentication failures in logs
+  - Email delivery delayed by more than 10 minutes
+  - Marketing or bulk email campaigns paused or stuck in queue
+Likely Cause:
+  - SMTP relay cluster overloaded or connection-refused due to upstream ISP block
+  - Sending domain's SPF/DKIM/DMARC record misconfigured after DNS change
+  - Email service API key revoked or rate-limited by email provider
+  - Downstream spam filter blacklisting the sending IP
+Troubleshooting Steps:
+  1. Check SMTP relay logs for connection errors, authentication failures, or bounces
+  2. Verify SPF, DKIM, and DMARC DNS records using mxtoolbox or equivalent
+  3. Check email provider dashboard (SendGrid, Mailgun, SES) for delivery metrics
+  4. Confirm sending IP is not on known blacklists (MXToolbox blacklist check)
+  5. If relay is overloaded, scale relay cluster or throttle bulk email jobs
+Escalation Team:   Platform / DevOps Team + Email Provider Support (if provider-side issue)
+Severity Guidance: P1 if all transactional email stopped; P2 for > 15-minute delays on auth emails; P3 for bulk delays
 
-• Trigger: Payment-Gateway – duplicate charge records, idempotency key collisions, reconciliation mismatches
-  Escalation Team: Payments Engineering Squad + Finance On-Call
-  Default Severity: P2
-  Typical Root Cause: Retry logic not honouring idempotency keys due to a race condition in the transaction service.
+──────────────────────────────────────────────────────────────────────────────
+SOP-008: Account Lockouts
+──────────────────────────────────────────────────────────────────────────────
+Service:          Auth-Service
+Symptoms:
+  - Multiple users reporting accounts locked after failed login attempts
+  - Helpdesk ticket volume for account unlock requests spiking
+  - Auth logs showing repeated failed attempts from single IPs or user agents
+  - Lockout policy triggering faster than configured threshold suggests
+Likely Cause:
+  - Misconfigured lockout policy threshold (too aggressive) after a config change
+  - Automated integration or service account using stale credentials
+  - Coordinated low-rate brute-force attack staying just below alert thresholds
+  - Clock skew between auth nodes causing valid tokens to appear expired
+Troubleshooting Steps:
+  1. Review auth logs for the locked accounts – identify source IPs and user agents
+  2. Check lockout policy configuration for recent changes
+  3. If service account involved, rotate credentials and update all consumers
+  4. For brute-force pattern, block offending IP ranges via WAF or firewall
+  5. Bulk-unlock legitimate users via admin console after confirming source
+Escalation Team:   IAM Squad + Security Operations Centre (SOC) if brute-force confirmed
+Severity Guidance: P2 if affecting > 50 users or critical service accounts; P3 for isolated individual lockouts
 
-• Trigger: Frontend-UI – white screen on load, JavaScript bundle 404/parse error, framework crash, affects > 5% of sessions
-  Escalation Team: Frontend Engineering Squad + Release Management
-  Default Severity: P2
-  Typical Root Cause: Broken asset hash in the CDN manifest after a bad deployment or cache-busting misconfiguration.
+──────────────────────────────────────────────────────────────────────────────
+SOP-009: Server Resource Exhaustion (CPU / Memory / Disk)
+──────────────────────────────────────────────────────────────────────────────
+Service:          Any (Database, Auth-Service, Payment-Gateway, Email-Service)
+Symptoms:
+  - CPU sustained above 90% for > 5 minutes on a production node
+  - Memory utilisation > 95% with increasing swap usage
+  - Disk utilisation > 80% on any production volume
+  - OOM-killer events appearing in kernel logs
+  - Service response times degrading progressively without a traffic spike
+Likely Cause:
+  - Memory leak introduced in a recent application deployment
+  - Runaway batch job or unindexed query consuming excessive CPU
+  - Log rotation not configured – filling disk with unarchived logs
+  - WAL or audit log accumulation on database volumes
+Troubleshooting Steps:
+  1. Identify top resource-consuming processes using top / htop / ps
+  2. For disk: identify large directories with du -sh and archive or delete safely
+  3. For memory: check for leak patterns in application heap dumps or metrics
+  4. For CPU: profile the process; check for runaway queries or infinite loops
+  5. If immediate relief needed, restart the offending service pod during low-traffic window
+Escalation Team:   SRE On-Call + owning service squad
+Severity Guidance: P1 if service already degraded; P2 if > 85% utilisation with growth trend; P3 for proactive alerts
 
-• Trigger: Network – core switch unreachable, inter-VLAN routing failure, > 20% of services unavailable, BGP session down
-  Escalation Team: Network Operations (NetOps) Team + Data Centre Ops
-  Default Severity: P1
-  Typical Root Cause: Switch firmware bug or misconfigured spanning-tree protocol causing a forwarding loop.
-
-• Trigger: Network – packet loss 1–10% on uplinks, intermittent latency spikes, degraded VPN tunnels, no full outage
-  Escalation Team: Network Operations (NetOps) Team
-  Default Severity: P3
-  Typical Root Cause: Saturated uplink bandwidth or faulty SFP transceiver introducing intermittent signal errors.
+──────────────────────────────────────────────────────────────────────────────
+SOP-010: Security – Suspicious Activity and Potential Breach
+──────────────────────────────────────────────────────────────────────────────
+Service:          Auth-Service / Network / Any
+Symptoms:
+  - Anomalous login spike (thousands of attempts from diverse IPs in minutes)
+  - Unusual API access patterns – bulk data export, off-hours admin actions
+  - WAF or IDS alerts for SQL injection, XSS, or credential-stuffing signatures
+  - New privileged accounts created without a change request
+  - Alerts from SIEM for lateral movement or privilege escalation
+Likely Cause:
+  - Credential-stuffing attack using leaked username/password lists
+  - Compromised service account or API key being abused
+  - Insider threat or misconfigured public-facing admin endpoint
+  - Unpatched vulnerability exploited by an external actor
+Troubleshooting Steps:
+  1. Do NOT attempt to remediate alone – escalate to SOC immediately
+  2. Preserve all logs; do not restart affected services until SOC advises
+  3. Isolate the affected system at network level if active exfiltration is suspected
+  4. Revoke and rotate any credentials or API keys associated with the anomaly
+  5. Follow the organisation's Incident Response Plan (IRP) from this point
+Escalation Team:   Security Operations Centre (SOC) – IMMEDIATE + CISO notification for confirmed breach
+Severity Guidance: P1 always; treat as critical until ruled out

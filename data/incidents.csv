@@ -1,0 +1,19 @@
+ticket_id,timestamp,service,error_message,reported_by
+TKT-001,2024-11-01 02:14:33,Auth-Service,CRITICAL: All user authentication requests failing – 100% login failure rate across all regions. Possible token-signing key corruption.,sre-oncall@company.com
+TKT-002,2024-11-01 03:45:10,Database,CRITICAL: Primary PostgreSQL node unresponsive. Replication lag exceeded 9000s. Automatic failover did not trigger. Production writes fully blocked.,dba-team@company.com
+TKT-003,2024-11-01 06:22:57,Payment-Gateway,CRITICAL: Payment processor returning HTTP 500 for all charge requests. Revenue impact estimated at $12,000/min. Stripe webhook callbacks timing out.,noc@company.com
+TKT-004,2024-11-01 07:05:18,Auth-Service,SECURITY: Anomalous login spike detected – 47,000 failed attempts in 10 minutes from 312 distinct IPs. Possible credential-stuffing attack in progress.,security@company.com
+TKT-005,2024-11-01 08:31:44,Network,CRITICAL: Core switch SW-03 unreachable. Inter-VLAN routing between data-centre pods A and B has failed. Approximately 60% of internal services unavailable.,netops@company.com
+TKT-006,2024-11-01 09:14:02,Frontend-UI,HIGH: JavaScript bundle fails to load on Safari 17.x – white screen on initial page load. Affects ~18% of active user base. Reproduced consistently on macOS Sonoma.,qa-team@company.com
+TKT-007,2024-11-01 10:03:55,Database,HIGH: Slow-query alert – nightly reporting job running for 4h 22m (SLA: 45 min). Table scans on orders_archive detected; missing index suspected.,dba-team@company.com
+TKT-008,2024-11-01 10:47:28,Payment-Gateway,HIGH: Recurring transaction retry logic creating duplicate charge records. Idempotency key collision rate at 0.8%. Finance team flagged 34 affected accounts.,support-l2@company.com
+TKT-009,2024-11-01 11:20:13,Auth-Service,MEDIUM: Password-reset emails delayed by 18–25 minutes. SMTP relay queue depth at 94%. No authentication failures, but user complaints increasing.,helpdesk@company.com
+TKT-010,2024-11-01 11:58:40,Network,MEDIUM: Intermittent packet loss (3–7%) observed on uplink between office-lon-02 and cloud egress router. Affects video-conferencing quality; no service outage.,netops@company.com
+TKT-011,2024-11-01 12:30:05,Frontend-UI,MEDIUM: Session timeout modal fires after 2 minutes of inactivity instead of the configured 30 minutes. Affects all authenticated users post-deploy v4.11.2.,qa-team@company.com
+TKT-012,2024-11-01 13:15:22,Database,MEDIUM: Disk utilisation on replica node db-replica-02 reached 78%. Growth rate suggests threshold breach within 36 hours if not addressed.,dba-team@company.com
+TKT-013,2024-11-01 14:02:47,Payment-Gateway,LOW: Currency symbol rendered incorrectly (€ shown as â‚¬) on PDF invoices for EU customers. Cosmetic only; amounts and transactions are correct.,support-l1@company.com
+TKT-014,2024-11-01 14:44:59,Auth-Service,LOW: MFA setup wizard loses progress when user navigates back using browser back button. No data loss; workaround is to restart the flow.,helpdesk@company.com
+TKT-015,2024-11-01 15:10:33,Frontend-UI,LOW: Dark-mode toggle resets to light mode on every page navigation. Local storage preference not persisted correctly. Purely cosmetic preference issue.,qa-team@company.com
+TKT-016,2024-11-01 15:55:08,Network,LOW: DNS TTL for staging.internal set to 86400s instead of 300s. Causes stale resolution after environment redeployments. No production impact.,netops@company.com
+TKT-017,2024-11-01 16:30:27,Frontend-UI,LOW: Tooltip text on the dashboard help icon is truncated at 64 characters on 1280px-wide viewports. Full text visible at all other resolutions.,design-team@company.com
+TKT-018,2024-11-01 17:05:51,Payment-Gateway,LOW: Refund confirmation email missing merchant logo in Outlook desktop client. Renders correctly in all web and mobile clients. No functional impact.,support-l1@company.com

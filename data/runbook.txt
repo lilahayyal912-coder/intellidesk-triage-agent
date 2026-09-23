@@ -1,0 +1,59 @@
+IntelliDesk – Incident Triage Runbook (SOPs)
+=============================================
+Format per entry: Trigger | Escalation Team | Default Severity | Typical Root Cause
+---------------------------------------------
+
+• Trigger: Auth-Service – login failure rate > 10%, token validation errors, JWT exceptions, "authentication requests failing"
+  Escalation Team: Identity & Access Management (IAM) Squad + SRE On-Call
+  Default Severity: P1
+  Typical Root Cause: Token-signing key rotation failure or expired certificate on the auth provider.
+
+• Trigger: Auth-Service – anomalous login spike, credential-stuffing, brute-force attempts, failed-login count > 5,000 in 5 min
+  Escalation Team: Security Operations Centre (SOC) + IAM Squad
+  Default Severity: P1
+  Typical Root Cause: Leaked credential list being replayed against the authentication endpoint.
+
+• Trigger: Auth-Service – MFA setup errors, password-reset delays, OTP not delivered, SMTP queue depth > 80%
+  Escalation Team: Identity & Access Management (IAM) Squad
+  Default Severity: P3
+  Typical Root Cause: SMTP relay saturation or misconfigured MFA provider webhook URL.
+
+• Trigger: Database – primary node unresponsive, replication lag > 60s, failover did not trigger, "production writes blocked"
+  Escalation Team: Database Administration (DBA) Team + SRE On-Call
+  Default Severity: P1
+  Typical Root Cause: Deadlock cascade or out-of-memory condition causing the primary instance to stop accepting connections.
+
+• Trigger: Database – slow queries, SLA breach on batch jobs, table scan alerts, query runtime > 2× baseline
+  Escalation Team: Database Administration (DBA) Team
+  Default Severity: P2
+  Typical Root Cause: Missing or invalidated index following a schema migration or statistics refresh failure.
+
+• Trigger: Database – disk utilisation > 75% on any node, storage growth rate alert, "threshold breach within 48 hours"
+  Escalation Team: Database Administration (DBA) Team + Infrastructure Team
+  Default Severity: P3
+  Typical Root Cause: Unarchived audit logs or runaway write-ahead log (WAL) accumulation from a stalled replication slot.
+
+• Trigger: Payment-Gateway – HTTP 5xx on charge/refund endpoints, payment processor timeouts, "revenue impact", webhook failures
+  Escalation Team: Payments Engineering Squad + Finance On-Call + SRE On-Call
+  Default Severity: P1
+  Typical Root Cause: Upstream payment processor outage or misconfigured TLS certificate causing handshake failures.
+
+• Trigger: Payment-Gateway – duplicate charge records, idempotency key collisions, reconciliation mismatches
+  Escalation Team: Payments Engineering Squad + Finance On-Call
+  Default Severity: P2
+  Typical Root Cause: Retry logic not honouring idempotency keys due to a race condition in the transaction service.
+
+• Trigger: Frontend-UI – white screen on load, JavaScript bundle 404/parse error, framework crash, affects > 5% of sessions
+  Escalation Team: Frontend Engineering Squad + Release Management
+  Default Severity: P2
+  Typical Root Cause: Broken asset hash in the CDN manifest after a bad deployment or cache-busting misconfiguration.
+
+• Trigger: Network – core switch unreachable, inter-VLAN routing failure, > 20% of services unavailable, BGP session down
+  Escalation Team: Network Operations (NetOps) Team + Data Centre Ops
+  Default Severity: P1
+  Typical Root Cause: Switch firmware bug or misconfigured spanning-tree protocol causing a forwarding loop.
+
+• Trigger: Network – packet loss 1–10% on uplinks, intermittent latency spikes, degraded VPN tunnels, no full outage
+  Escalation Team: Network Operations (NetOps) Team
+  Default Severity: P3
+  Typical Root Cause: Saturated uplink bandwidth or faulty SFP transceiver introducing intermittent signal errors.

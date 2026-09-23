@@ -1,0 +1,4 @@
+langflow
+ibm-watsonx-ai
+pandas
+python-dotenv

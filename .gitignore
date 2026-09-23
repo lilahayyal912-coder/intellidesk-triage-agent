@@ -1,0 +1,38 @@
+﻿# Byte-compiled / optimised / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# Environment variables
+*.env
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest / mypy / pyright
+.pytest_cache/
+.mypy_cache/
+pyrightconfig.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project output
+output/

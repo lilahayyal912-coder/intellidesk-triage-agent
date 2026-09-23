@@ -1,0 +1,2 @@
+timestamp,service,error_message,severity,short_reason,responsible_team,requires_human_escalation,recommended_next_steps
+2026-09-23 17:06:30 UTC,Auth-Service,not able to login,P1 - Critical,"Authentication service is down, preventing user login.",Identity & Access Management (IAM) Squad + SRE On-Call,True,"Check auth-service error logs for JWT or certificate-related exceptions | Verify the auth-service health endpoint and service status | If certificate errors are found, rotate or renew the certificates | If the service is down, restart the auth-service container"

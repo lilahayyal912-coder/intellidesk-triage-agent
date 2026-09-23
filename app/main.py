@@ -51,6 +51,13 @@ except EnvironmentError as _exc:
     EscalationRequest = None               # type: ignore[assignment]
     escalate = None                        # type: ignore[assignment]
 
+# incident_history has no config dependency — always safe to import
+from services.incident_history import (
+    HistoryRecord,
+    load_incident_history,
+    save_incident_history,
+)
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 SERVICES = [
     "Auth-Service",
@@ -237,6 +244,21 @@ def _page_analyze() -> None:
             st.error(f"**Escalation agent failed:** {exc}")
             return
 
+    # ── Save to history (only after full success) ─────────────────────────────
+    try:
+        record = HistoryRecord(
+            service=service,
+            error_message=error_message,
+            severity=classification.severity,
+            short_reason=classification.short_reason,
+            responsible_team=escalation.escalated_team,
+            requires_human_escalation=escalation.requires_human_escalation,
+            recommended_next_steps=" | ".join(escalation.recommended_next_steps),
+        )
+        save_incident_history(record)
+    except Exception:
+        pass  # history write must never crash the UI
+
     st.markdown("---")
     st.markdown("### Triage Result")
     _render_triage_result(classification, retrieval, escalation)
@@ -341,6 +363,113 @@ def _page_results() -> None:
                 st.success("✅ No immediate escalation required")
 
 
+# ── Page: Incident History ────────────────────────────────────────────────────
+
+def _page_history() -> None:
+    st.subheader("🕒 Incident History")
+    st.markdown(
+        "All incidents that were successfully triaged through the live dashboard are recorded here. "
+        "Batch pipeline results appear in the **Processed Results** tab instead."
+    )
+
+    df = load_incident_history()
+
+    if df.empty:
+        st.info(
+            "No history yet. Analyze an incident using the **🔍 Analyze** tab "
+            "and the record will appear here automatically."
+        )
+        return
+
+    # ── Summary metrics ───────────────────────────────────────────────────────
+    total     = len(df)
+    p1        = (df["severity"] == "P1 - Critical").sum()
+    p2        = (df["severity"] == "P2 - High").sum()
+    escalated = df["requires_human_escalation"].astype(str).str.lower().isin(["true", "1"]).sum()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Records", total)
+    c2.metric("🔴 P1 Critical", int(p1))
+    c3.metric("🟠 P2 High", int(p2))
+    c4.metric("⚠️ Escalated", int(escalated))
+
+    st.markdown("---")
+
+    # ── Filters ───────────────────────────────────────────────────────────────
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        sev_filter = st.multiselect(
+            "Filter by severity",
+            options=["P1 - Critical", "P2 - High", "P3 - Medium", "P4 - Low"],
+            default=[],
+            key="hist_sev_filter",
+        )
+    with col_f2:
+        svc_options = sorted(df["service"].dropna().unique().tolist())
+        svc_filter = st.multiselect(
+            "Filter by service",
+            options=svc_options,
+            default=[],
+            key="hist_svc_filter",
+        )
+    with col_f3:
+        esc_filter = st.selectbox(
+            "Human escalation",
+            options=["All", "Required", "Not required"],
+            key="hist_esc_filter",
+        )
+
+    filtered = df.copy()
+    if sev_filter:
+        filtered = filtered[filtered["severity"].isin(sev_filter)]
+    if svc_filter:
+        filtered = filtered[filtered["service"].isin(svc_filter)]
+    if esc_filter == "Required":
+        filtered = filtered[
+            filtered["requires_human_escalation"].astype(str).str.lower().isin(["true", "1"])
+        ]
+    elif esc_filter == "Not required":
+        filtered = filtered[
+            ~filtered["requires_human_escalation"].astype(str).str.lower().isin(["true", "1"])
+        ]
+
+    st.markdown(f"Showing **{len(filtered)}** of **{total}** records")
+
+    # ── Summary table ─────────────────────────────────────────────────────────
+    display_cols = ["timestamp", "service", "severity", "responsible_team", "requires_human_escalation"]
+    st.dataframe(
+        filtered[display_cols].style.apply(
+            lambda row: [f"background-color: {_severity_style(str(row.get('severity',''))).get('bg','#fff')}" for _ in row],
+            axis=1,
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # ── Expandable full detail ────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### Detail")
+    for _, row in filtered.iterrows():
+        sev   = str(row.get("severity", ""))
+        badge = _severity_badge(sev)
+        label = f"{row.get('timestamp','')[:16]}  |  {row.get('service','')}  |  {badge}"
+        with st.expander(label):
+            st.markdown(f"**Error message:** {row.get('error_message', '')}")
+            st.markdown(f"**Short reason:** {row.get('short_reason', '')}")
+            st.markdown(f"**Responsible team:** {row.get('responsible_team', '')}")
+            steps_raw = str(row.get("recommended_next_steps", ""))
+            if steps_raw:
+                st.markdown("**Recommended next steps:**")
+                for step in steps_raw.split(" | "):
+                    if step.strip():
+                        st.markdown(f"- {step.strip()}")
+            esc = str(row.get("requires_human_escalation", "")).lower()
+            if esc in ("true", "1"):
+                st.error("⚠️ Human escalation required")
+            else:
+                st.success("✅ No immediate escalation required")
+
+
 # ── App layout ────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -378,7 +507,11 @@ def main() -> None:
     # ── Mode selector ─────────────────────────────────────────────────────────
     mode = st.radio(
         "Select mode",
-        options=["🔍 Analyze a new incident", "📊 View processed incident results"],
+        options=[
+            "🔍 Analyze a new incident",
+            "📊 View processed incident results",
+            "🕒 Incident History",
+        ],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -387,8 +520,10 @@ def main() -> None:
 
     if mode == "🔍 Analyze a new incident":
         _page_analyze()
-    else:
+    elif mode == "📊 View processed incident results":
         _page_results()
+    else:
+        _page_history()
 
     # ── Footer ────────────────────────────────────────────────────────────────
     st.markdown("---")

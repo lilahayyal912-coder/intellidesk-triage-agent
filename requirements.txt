@@ -2,3 +2,4 @@ openai
 requests
 pandas
 python-dotenv
+streamlit

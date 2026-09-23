@@ -1,4 +1,4 @@
-langflow
-ibm-watsonx-ai
+openai
+requests
 pandas
 python-dotenv
